@@ -391,34 +391,88 @@ exports.getChatAnalytics = async (req, res) => {
       { name: "AI", value: aiCount },
     ];
 
-    // 6️ Growth metric
-    const growth = totalMessages > 5 ? "Increasing engagement" : "No data yet";
+    // 6️ Revenue & Customer Growth (fake data for demo / charts)
+    const revenueTrend = messages.length
+      ? [
+          { day: "Mon", revenue: 1000, expenses: 500 },
+          { day: "Tue", revenue: 1200, expenses: 700 },
+          { day: "Wed", revenue: 900, expenses: 400 },
+          { day: "Thu", revenue: 1500, expenses: 800 },
+          { day: "Fri", revenue: 1700, expenses: 600 },
+        ]
+      : [];
 
-    // 7️Generate AI insights based on chat content
+    const customerGrowth = messages.length
+      ? [
+          { day: "Mon", newCustomers: 5, churn: 1 },
+          { day: "Tue", newCustomers: 8, churn: 2 },
+          { day: "Wed", newCustomers: 6, churn: 1 },
+          { day: "Thu", newCustomers: 10, churn: 3 },
+          { day: "Fri", newCustomers: 7, churn: 1 },
+        ]
+      : [];
+
+    // 7️ Business growth calculation
+    let growth = "No data yet";
+    const totalRevenue = revenueTrend.reduce((sum, r) => sum + r.revenue, 0);
+    const totalExpenses = revenueTrend.reduce((sum, r) => sum + r.expenses, 0);
+    if (totalRevenue > 0) {
+      growth =
+        totalRevenue - totalExpenses > 0
+          ? "Profitable 📈"
+          : "Loss 📉";
+    }
+
+    // 8️ Generate AI insights
     const lastFewMessages = messages
-      .slice(-10) // last 10 messages
+      .slice(-10)
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
 
-    // Generate insights
-    const insightsPrompt = [
-      { role: "system", content: "You are a marketing analyst. Provide 3 concise actionable insights from this conversation." },
-      { role: "user", content: lastFewMessages },
-    ];
+    let recentInsights = [];
+    try {
+      const insightsPrompt = [
+        { role: "system", content: "You are a marketing analyst. Provide 3 concise actionable insights from this conversation." },
+        { role: "user", content: lastFewMessages },
+      ];
 
-    const recentInsightsRaw = await askGrok(insightsPrompt);
-    const recentInsights = recentInsightsRaw.split("\n").filter(i => i.trim() !== "");
+      const recentInsightsRaw = await askGrok(insightsPrompt);
 
-    // Generate top keywords
-    const keywordsPrompt = [
-      { role: "system", content: "Analyze this conversation and return 5 top marketing-related keywords separated by commas." },
-      { role: "user", content: lastFewMessages },
-    ];
+      if (recentInsightsRaw) {
+        recentInsights = recentInsightsRaw
+          .split(/\n|•|[0-9]\./)
+          .map(i => i.trim())
+          .filter(i => i.length > 0)
+          .slice(0, 3);
+      }
+    } catch (err) {
+      console.warn("AI insights generation failed:", err);
+      recentInsights = [];
+    }
 
-    const topKeywordsRaw = await askGrok(keywordsPrompt);
-    const topKeywords = topKeywordsRaw.split(",").map(k => k.trim());
+    // 9️ Generate top keywords
+    let topKeywords = [];
+    try {
+      const keywordsPrompt = [
+        { role: "system", content: "Analyze this conversation and return 5 top marketing-related keywords separated by commas." },
+        { role: "user", content: lastFewMessages },
+      ];
 
-    // 8️Return analytics
+      const topKeywordsRaw = await askGrok(keywordsPrompt);
+
+      if (topKeywordsRaw) {
+        topKeywords = topKeywordsRaw
+          .split(",")
+          .map(k => k.trim())
+          .filter(k => k.length > 0)
+          .slice(0, 5);
+      }
+    } catch (err) {
+      console.warn("AI keywords generation failed:", err);
+      topKeywords = [];
+    }
+
+    // 10️ Return analytics
     res.json({
       chatId,
       chatTitle,
@@ -429,9 +483,12 @@ exports.getChatAnalytics = async (req, res) => {
       recentInsights,
       topKeywords,
       growth,
+      revenueTrend,
+      customerGrowth,
     });
   } catch (err) {
     console.error("GET CHAT ANALYTICS ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
