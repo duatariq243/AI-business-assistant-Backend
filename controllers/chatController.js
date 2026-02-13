@@ -32,128 +32,208 @@ exports.sendMessage = async (req, res) => {
   }
 
   try {
-    // 1️ Ensure chat belongs to user
+    /* ===============================
+       1️⃣  Ensure chat belongs to user
+    =============================== */
     const chatCheck = await pool.query(
       "SELECT id, title FROM chats WHERE id = $1 AND user_id = $2",
       [chatId, userId]
     );
+
     if (chatCheck.rows.length === 0) {
       return res.status(403).json({ message: "Unauthorized chat access" });
     }
+
     const chat = chatCheck.rows[0];
 
-    // 2️ Save user message
+    /* ===============================
+       2️⃣  Get user email + extract name
+    =============================== */
+    const userResult = await pool.query(
+      "SELECT email FROM users WHERE id = $1",
+      [userId]
+    );
+    console.log("USER ID:", userId);
+console.log("USER RESULT:", userResult.rows);
+
+
+    let firstName = "there";
+
+      if (userResult.rows.length > 0) {
+        const email = userResult.rows[0].email;
+
+        let rawName = email.split("@")[0];       // "duatariq243"
+        rawName = rawName.replace(/\d+/g, "");  // remove numbers -> "duatariq"
+        rawName = rawName.split(/[._-]/)[0];    // keep first part -> "duatariq"
+
+        if (rawName.length > 0) {
+          firstName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase(); // "Duatariq"
+        }
+      }
+
+console.log("FINAL FIRST NAME:", firstName);
+
+
+    /* ===============================
+       3️⃣  Save user message
+    =============================== */
     const userMessage = await pool.query(
       "INSERT INTO messages (chat_id, role, content) VALUES ($1, $2, $3) RETURNING *",
       [chatId, "users", message]
     );
 
-    // 3️ Count messages for first message & summary logic
+    /* ===============================
+       4️⃣  Check if first message
+    =============================== */
     const messageCountResult = await pool.query(
       "SELECT COUNT(*) FROM messages WHERE chat_id = $1",
       [chatId]
     );
-    const isFirstMessage = Number(messageCountResult.rows[0].count) === 1;
-    // 4️ AI prompt for marketing assistant
-   const marketingPrompt = [
-  {
-    role: "system",
-    content: `
+
+    const messageCount = Number(messageCountResult.rows[0].count);
+    const isFirstMessage = messageCount === 1;
+
+    /* ===============================
+       5️⃣  Build Dynamic Greeting
+    =============================== */
+    let greetingInstruction = "";
+
+    if (isFirstMessage) {
+      greetingInstruction = `
+Start your response with:
+"Hi ${firstName},"
+
+Place it on its own line.
+Keep it warm but professional.
+`;
+    }
+
+    /* ===============================
+       6️⃣  AI Marketing Prompt
+    =============================== */
+    const marketingPrompt = [
+      {
+        role: "system",
+        content: `
 You are an advanced AI marketing strategist and growth consultant.
 
-Your behavior guidelines:
+${greetingInstruction}
 
-1. Think strategically before answering.
-2. Identify the user's real business objective (traffic, leads, sales, branding).
-3. Ask clarifying questions if context is missing.
-4. Provide structured responses using headings and bullet points.
-5. When giving suggestions, explain the reasoning behind them.
-6. Offer actionable next steps.
-7. Avoid generic advice.
-8. Be concise but insightful.
-9. Maintain a professional, consultant-level tone.
-10. Focus strictly on marketing, growth, branding, and digital strategy.
+Behavior Rules:
+- Think strategically before answering.
+- Identify the user's real business objective.
+- Avoid generic advice.
+- Provide structured, executive-level insight.
+- Be concise, tactical, and professional.
+- Use step-by-step clarity when appropriate.
+- Focus strictly on marketing and growth.
 
-Response structure rules:
-- Start with a short understanding of the problem.
-- Then provide strategy.
-- Then tactical examples.
-- End with recommended next steps.
+Response Structure:
+1. Greeting (only if first message)
+2. Understanding of goal
+3. Strategy
+4. Tactical examples
+5. Recommended next steps
 `
-  },
-  {
-    role: "user",
-    content: message
-  }
-];
+      },
+      {
+        role: "user",
+        content: message
+      }
+    ];
 
     const aiReply = await askGrok(marketingPrompt);
 
-    // 5 Save AI message
+    /* ===============================
+       7️⃣  Save AI message
+    =============================== */
     const aiMessage = await pool.query(
       "INSERT INTO messages (chat_id, role, content) VALUES ($1, $2, $3) RETURNING *",
       [chatId, "ai", aiReply]
     );
 
-    // 6️Auto-generate chat title if first message
+    /* ===============================
+       8️⃣  Auto-generate chat title
+    =============================== */
     let generatedTitle = null;
+
     if (isFirstMessage && !chat.title) {
       const titlePrompt = [
         {
           role: "system",
-          content: "Generate a short, 6-word max, marketing-focused chat title. No emojis or quotes."
+          content: `
+Generate a concise professional marketing chat title.
+
+Rules:
+- Maximum 6 words
+- No emojis
+- No quotation marks
+- Reflect core marketing intent
+`
         },
         {
           role: "user",
           content: message
         }
       ];
+
       generatedTitle = await askGrok(titlePrompt);
+
       await pool.query(
         "UPDATE chats SET title = $1 WHERE id = $2",
         [generatedTitle.trim(), chatId]
       );
     }
 
-    // 7 Generate business summary every 5 messages
+    /* ===============================
+       9️⃣  Generate summary every 5 messages
+    =============================== */
     let businessSummary = null;
-    if (Number(messageCountResult.rows[0].count) % 5 === 0) {
+
+    if (messageCount % 5 === 0) {
       const summaryPrompt = [
         {
           role: "system",
           content: `
-You are a marketing analyst.
-Create a short structured marketing insight summary.
-Include:
-- Core marketing challenge
-- Key insights and opportunities
-- Recommended next actions
-Keep it concise and actionable.
+You are a senior marketing analyst.
+
+Provide:
+1. Core Business Challenge
+2. Key Insights
+3. Strategic Opportunities
+4. Recommended Actions
+
+Be concise and executive-focused.
 `
         },
         {
           role: "user",
-          content: `Conversation so far:\nUser: ${message}\nAI: ${aiReply}`
+          content: `User: ${message}\nAI: ${aiReply}`
         }
       ];
+
       businessSummary = await askGrok(summaryPrompt);
     }
 
-    // 8️ Respond
+    /* ===============================
+       🔟  Final Response
+    =============================== */
     res.json({
       userMessage: userMessage.rows[0],
       aiMessage: aiMessage.rows[0],
       chatTitle: generatedTitle,
       businessSummary
     });
+
   } catch (err) {
-    console.error("SEND MESSAGE ERROR:", err.message, err.stack);
+    console.error("SEND MESSAGE ERROR:", err);
     res.status(500).json({
       message: "AI error",
       error: err.message
     });
   }
 };
+
 
 
 /* =========================
