@@ -32,9 +32,7 @@ exports.sendMessage = async (req, res) => {
   }
 
   try {
-    /* ===============================
-       1️⃣  Ensure chat belongs to user
-    =============================== */
+    // 1️⃣ Ensure chat belongs to user
     const chatCheck = await pool.query(
       "SELECT id, title FROM chats WHERE id = $1 AND user_id = $2",
       [chatId, userId]
@@ -46,45 +44,28 @@ exports.sendMessage = async (req, res) => {
 
     const chat = chatCheck.rows[0];
 
-    /* ===============================
-       2️⃣  Get user email + extract name
-    =============================== */
+    // 2️⃣ Get user email + extract name
     const userResult = await pool.query(
       "SELECT email FROM users WHERE id = $1",
       [userId]
     );
-    console.log("USER ID:", userId);
-console.log("USER RESULT:", userResult.rows);
-
 
     let firstName = "there";
-
-      if (userResult.rows.length > 0) {
-        const email = userResult.rows[0].email;
-
-        let rawName = email.split("@")[0];       // "duatariq243"
-        rawName = rawName.replace(/\d+/g, "");  // remove numbers -> "duatariq"
-        rawName = rawName.split(/[._-]/)[0];    // keep first part -> "duatariq"
-
-        if (rawName.length > 0) {
-          firstName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase(); // "Duatariq"
-        }
+    if (userResult.rows.length > 0) {
+      const email = userResult.rows[0].email;
+      let rawName = email.split("@")[0].replace(/\d+/g, "").split(/[._-]/)[0];
+      if (rawName.length > 0) {
+        firstName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
       }
+    }
 
-console.log("FINAL FIRST NAME:", firstName);
-
-
-    /* ===============================
-       3️⃣  Save user message
-    =============================== */
+    // 3️⃣ Save user message
     const userMessage = await pool.query(
       "INSERT INTO messages (chat_id, role, content) VALUES ($1, $2, $3) RETURNING *",
       [chatId, "users", message]
     );
 
-    /* ===============================
-       4️⃣  Check if first message
-    =============================== */
+    // 4️⃣ Check if first message
     const messageCountResult = await pool.query(
       "SELECT COUNT(*) FROM messages WHERE chat_id = $1",
       [chatId]
@@ -93,27 +74,24 @@ console.log("FINAL FIRST NAME:", firstName);
     const messageCount = Number(messageCountResult.rows[0].count);
     const isFirstMessage = messageCount === 1;
 
-    /* ===============================
-       5️⃣  Build Dynamic Greeting
-    =============================== */
+    // 5️⃣ Build dynamic greeting
     let greetingInstruction = "";
 
     if (isFirstMessage) {
       greetingInstruction = `
 Start your response with:
-"Hi ${firstName},"
+"Hi ${firstName}, how can I help you with your business?"
 
 Place it on its own line.
 Keep it warm but professional.
+If user message is unrelated to business (like just a name), respond politely without assuming business intent.
 `;
     }
 
-    /* ===============================
-       6️⃣  AI Marketing Prompt
-    =============================== */
+    // 6️⃣ AI Marketing Prompt
     const marketingPrompt = [
       {
-        role: "system",
+         role: "system",
         content: `
 You are an advanced AI marketing strategist and growth consultant.
 
@@ -144,24 +122,26 @@ Response Structure:
 
     const aiReply = await askGrok(marketingPrompt);
 
-    /* ===============================
-       7️⃣  Save AI message
-    =============================== */
+    // 7️⃣ Save AI message
     const aiMessage = await pool.query(
       "INSERT INTO messages (chat_id, role, content) VALUES ($1, $2, $3) RETURNING *",
       [chatId, "ai", aiReply]
     );
+   
+    const lowerMessage = message.toLowerCase();
+const greetingRegex = /^(hi|hello|hey|hiya)(,?\s?[a-z]*)?$/i;
+const businessKeywords = ["business", "marketing", "sales", "growth", "strategy", "product", "customer", "revenue"];
 
-    /* ===============================
-       8️⃣  Auto-generate chat title
-    =============================== */
+const isGreetingOnly = greetingRegex.test(lowerMessage);
+const isBusinessRelated = !isGreetingOnly && businessKeywords.some(keyword => lowerMessage.includes(keyword));
+    // 8️⃣ Auto-generate chat title
+    
     let generatedTitle = null;
-
-    if (isFirstMessage && !chat.title) {
-      const titlePrompt = [
-        {
-          role: "system",
-          content: `
+if (isFirstMessage && !chat.title) {
+  const titlePrompt = [
+    {
+      role: "system",
+      content: `
 Generate a concise professional marketing chat title.
 
 Rules:
@@ -170,31 +150,30 @@ Rules:
 - No quotation marks
 - Reflect core marketing intent
 `
-        },
-        {
-          role: "user",
-          content: message
-        }
-      ];
-
-      generatedTitle = await askGrok(titlePrompt);
-
-      await pool.query(
-        "UPDATE chats SET title = $1 WHERE id = $2",
-        [generatedTitle.trim(), chatId]
-      );
+    },
+    {
+      role: "user",
+      content: message
     }
+  ];
 
-    /* ===============================
-       9️⃣  Generate summary every 5 messages
-    =============================== */
+  generatedTitle = await askGrok(titlePrompt);
+
+  await pool.query(
+    "UPDATE chats SET title = $1 WHERE id = $2",
+    [generatedTitle.trim(), chatId]
+  );
+}
+
+    // 9️⃣ Generate summary every 5 messages
     let businessSummary = null;
 
-    if (messageCount % 5 === 0) {
-      const summaryPrompt = [
-        {
-          role: "system",
-          content: `
+// Only generate summary if message is business-related AND it's every 5th message
+if (messageCount % 5 === 0 && isBusinessRelated) {
+  const summaryPrompt = [
+    {
+      role: "system",
+      content: `
 You are a senior marketing analyst.
 
 Provide:
@@ -205,19 +184,16 @@ Provide:
 
 Be concise and executive-focused.
 `
-        },
-        {
-          role: "user",
-          content: `User: ${message}\nAI: ${aiReply}`
-        }
-      ];
-
-      businessSummary = await askGrok(summaryPrompt);
+    },
+    {
+      role: "user",
+      content: `User: ${message}\nAI: ${aiReply}`
     }
+  ];
 
-    /* ===============================
-       🔟  Final Response
-    =============================== */
+  businessSummary = await askGrok(summaryPrompt);
+}
+    // 🔟 Final Response
     res.json({
       userMessage: userMessage.rows[0],
       aiMessage: aiMessage.rows[0],
@@ -233,7 +209,6 @@ Be concise and executive-focused.
     });
   }
 };
-
 
 
 /* =========================
@@ -346,7 +321,7 @@ exports.getChatAnalytics = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    // 1️ Check chat belongs to user
+    //  Check chat belongs to user
     const chatCheck = await pool.query(
       "SELECT * FROM chats WHERE id = $1 AND user_id = $2",
       [chatId, userId]
@@ -358,19 +333,18 @@ exports.getChatAnalytics = async (req, res) => {
 
     const chatTitle = chatCheck.rows[0].title;
 
-    // 2️ Get all messages for this chat
+    //  Get all messages for this chat
     const messagesResult = await pool.query(
       "SELECT role, content, created_at FROM messages WHERE chat_id = $1 ORDER BY created_at ASC",
       [chatId]
     );
-
     const messages = messagesResult.rows;
 
-    // 3️ Aggregate basic data
+    //  Aggregate basic data
     const totalMessages = messages.length;
     const aiSuggestions = messages.filter(m => m.role === "ai").length;
 
-    // 4️ Daily messages
+    //  Daily messages
     const dailyMessagesMap = {};
     messages.forEach(msg => {
       const day = new Date(msg.created_at).toLocaleDateString("en-US", {
@@ -383,7 +357,7 @@ exports.getChatAnalytics = async (req, res) => {
       messages: dailyMessagesMap[day],
     }));
 
-    // 5️ User vs AI messages
+    //  User vs AI messages
     const userCount = messages.filter(m => m.role === "users").length;
     const aiCount = messages.filter(m => m.role === "ai").length;
     const userVsAi = [
@@ -391,8 +365,21 @@ exports.getChatAnalytics = async (req, res) => {
       { name: "AI", value: aiCount },
     ];
 
-    // 6️ Revenue & Customer Growth (fake data for demo / charts)
-    const revenueTrend = messages.length
+    //  Determine if last few user messages are greetings only
+    const lastUserMessages = messages
+      .filter(m => m.role === "users")
+      .slice(-5)
+      .map(m => m.content.toLowerCase())
+      .join(" ");
+
+    const greetingRegex = /^(hi|hello|hey|hiya)(,?\s?[a-z]*)?$/i;
+    const businessKeywords = ["business", "marketing", "sales", "growth", "strategy", "product", "customer", "revenue"];
+
+    const isGreetingOnly = greetingRegex.test(lastUserMessages);
+    const isBusinessRelated = !isGreetingOnly && businessKeywords.some(keyword => lastUserMessages.includes(keyword));
+
+    //  Revenue & Customer Growth (fake data only if business-related)
+    const revenueTrend = isBusinessRelated
       ? [
           { day: "Mon", revenue: 1000, expenses: 500 },
           { day: "Tue", revenue: 1200, expenses: 700 },
@@ -402,7 +389,7 @@ exports.getChatAnalytics = async (req, res) => {
         ]
       : [];
 
-    const customerGrowth = messages.length
+    const customerGrowth = isBusinessRelated
       ? [
           { day: "Mon", newCustomers: 5, churn: 1 },
           { day: "Tue", newCustomers: 8, churn: 2 },
@@ -412,67 +399,60 @@ exports.getChatAnalytics = async (req, res) => {
         ]
       : [];
 
-    // 7️ Business growth calculation
-    let growth = "No data yet";
-    const totalRevenue = revenueTrend.reduce((sum, r) => sum + r.revenue, 0);
-    const totalExpenses = revenueTrend.reduce((sum, r) => sum + r.expenses, 0);
-    if (totalRevenue > 0) {
-      growth =
-        totalRevenue - totalExpenses > 0
-          ? "Profitable 📈"
-          : "Loss 📉";
+    //  Business growth calculation
+    let growth = "";
+    if (isBusinessRelated && revenueTrend.length > 0) {
+      const totalRevenue = revenueTrend.reduce((sum, r) => sum + r.revenue, 0);
+      const totalExpenses = revenueTrend.reduce((sum, r) => sum + r.expenses, 0);
+      growth = totalRevenue - totalExpenses > 0 ? "Profitable 📈" : "Loss 📉";
     }
 
-    // 8️ Generate AI insights
+    // Generate AI insights and keywords only if business-related
     const lastFewMessages = messages
       .slice(-10)
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
 
     let recentInsights = [];
-    try {
-      const insightsPrompt = [
-        { role: "system", content: "You are a marketing analyst. Provide 3 concise actionable insights from this conversation." },
-        { role: "user", content: lastFewMessages },
-      ];
-
-      const recentInsightsRaw = await askGrok(insightsPrompt);
-
-      if (recentInsightsRaw) {
-        recentInsights = recentInsightsRaw
-          .split(/\n|•|[0-9]\./)
-          .map(i => i.trim())
-          .filter(i => i.length > 0)
-          .slice(0, 3);
-      }
-    } catch (err) {
-      console.warn("AI insights generation failed:", err);
-      recentInsights = [];
-    }
-
-    // 9️ Generate top keywords
     let topKeywords = [];
-    try {
-      const keywordsPrompt = [
-        { role: "system", content: "Analyze this conversation and return 5 top marketing-related keywords separated by commas." },
-        { role: "user", content: lastFewMessages },
-      ];
 
-      const topKeywordsRaw = await askGrok(keywordsPrompt);
-
-      if (topKeywordsRaw) {
-        topKeywords = topKeywordsRaw
-          .split(",")
-          .map(k => k.trim())
-          .filter(k => k.length > 0)
-          .slice(0, 5);
+    if (isBusinessRelated) {
+      try {
+        const insightsPrompt = [
+          { role: "system", content: "You are a marketing analyst. Provide 3 concise actionable insights from this conversation." },
+          { role: "user", content: lastFewMessages },
+        ];
+        const recentInsightsRaw = await askGrok(insightsPrompt);
+        if (recentInsightsRaw) {
+          recentInsights = recentInsightsRaw
+            .split(/\n|•|[0-9]\./)
+            .map(i => i.trim())
+            .filter(i => i.length > 0)
+            .slice(0, 3);
+        }
+      } catch (err) {
+        console.warn("AI insights generation failed:", err);
       }
-    } catch (err) {
-      console.warn("AI keywords generation failed:", err);
-      topKeywords = [];
+
+      try {
+        const keywordsPrompt = [
+          { role: "system", content: "Analyze this conversation and return 5 top marketing-related keywords separated by commas." },
+          { role: "user", content: lastFewMessages },
+        ];
+        const topKeywordsRaw = await askGrok(keywordsPrompt);
+        if (topKeywordsRaw) {
+          topKeywords = topKeywordsRaw
+            .split(",")
+            .map(k => k.trim())
+            .filter(k => k.length > 0)
+            .slice(0, 5);
+        }
+      } catch (err) {
+        console.warn("AI keywords generation failed:", err);
+      }
     }
 
-    // 10️ Return analytics
+    //  Return analytics
     res.json({
       chatId,
       chatTitle,
@@ -491,4 +471,3 @@ exports.getChatAnalytics = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
