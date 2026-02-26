@@ -39,22 +39,23 @@ exports.signup = async (req, res) => {
       [name,email,hashedPassword,verificationToken]
     );
 
-    const verifyURL = `http://localhost:5000/api/auth/verify/${verificationToken}`;
+    const verifyURL = `${process.env.BASE_URL}/api/auth/verify/${verificationToken}`;
 
     const info = await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Verify your account",
-      html: `<a href="${verifyURL}">Verify Email</a>`,
+      html: `<p>Hello ${name},</p>
+             <p>Please verify your account by clicking the link below:</p>
+             <a href="${verifyURL}">Verify Email</a>`,
     });
 
     console.log("Email sent:", info.response);
     res.json({ message: "Signup successful. Please verify your email." });
 
   } catch (err) {
-    console.error(err);
+    console.error("SIGNUP ERROR:", err);
 
-    // optional rollback if user created
     await pool.query("DELETE FROM users WHERE email=$1", [email]).catch(() => {});
 
     res.status(500).json({ message: "Server error", error: err.message });
@@ -83,6 +84,7 @@ exports.verifyEmail = async (req, res) => {
     res.json({ message: "Email verified successfully" });
 
   } catch (err) {
+    console.error("VERIFY EMAIL ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
