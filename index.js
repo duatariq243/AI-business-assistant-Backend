@@ -22,11 +22,11 @@ app.use("/api/chat" ,chatRoutes);
 
 app.get("/test-db", async (req, res) => {
   try {
-    const result = await pool.query("SELECT 1");
-    res.json({ ok: true });
+    const result = await pool.query("SELECT NOW()");
+    res.json({ ok: true, time: result.rows[0] });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false });
+    console.error("DB ERROR:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
