@@ -25,8 +25,8 @@ exports.signup = async (req, res) => {
 
     res.json(newUser.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("DB ERROR:", err); // 👈 VERY IMPORTANT
+  return res.status(500).json({ message: "DB error", error: err.message });
   }
 };
 
