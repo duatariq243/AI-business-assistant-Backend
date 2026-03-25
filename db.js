@@ -5,5 +5,6 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false,
   },
-  sslmode: "require",
 });
+
+module.exports = pool; 
