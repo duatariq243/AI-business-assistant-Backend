@@ -137,34 +137,27 @@ const isBusinessRelated = !isGreetingOnly && businessKeywords.some(keyword => lo
     // 8️⃣ Auto-generate chat title
     
     let generatedTitle = null;
-if (isFirstMessage && !chat.title) {
+// Only generate title if chat has no meaningful title yet
+if (!chat.title || chat.title === "New Chat") {
   const titlePrompt = [
     {
       role: "system",
-      content: `
-Generate a concise professional marketing chat title.
-
-Rules:
-- Maximum 6 words
-- No emojis
-- No quotation marks
-- Reflect core marketing intent
-`
+      content: "Generate a concise professional chat title in 4-5 words based on the user message. No emojis or quotes."
     },
-    {
-      role: "user",
-      content: message
-    }
+    { role: "user", content: message }
   ];
 
-  generatedTitle = await askGrok(titlePrompt);
+  const generatedTitle = await askGrok(titlePrompt);
 
+  // Update DB
   await pool.query(
     "UPDATE chats SET title = $1 WHERE id = $2",
     [generatedTitle.trim(), chatId]
   );
-}
 
+  // Update local variable so response uses it
+  chat.title = generatedTitle.trim();
+}
     // 9️⃣ Generate summary every 5 messages
     let businessSummary = null;
 
@@ -197,7 +190,7 @@ Be concise and executive-focused.
     res.json({
       userMessage: userMessage.rows[0],
       aiMessage: aiMessage.rows[0],
-      chatTitle: generatedTitle,
+      chatTitle: chat.title,
       businessSummary
     });
 
