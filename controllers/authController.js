@@ -1,38 +1,32 @@
 const pool = require("../db");
-const supabase = require('../supabase.js'); // adjust path
 const bcrypt = require("bcryptjs");
-
 const jwt = require("jsonwebtoken");
 
-
-
+//signup
 exports.signup = async (req, res) => {
   const { name, email, password } = req.body;
 
   try {
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
-
-    if (existingUser) {
+    // Check if user exists
+    const userExists = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (userExists.rows.length > 0) {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    const { data, error } = await supabase
-      .from('users')
-      .insert([{ name, email, password: hashedPassword }])
-      .select()
-      .single();
+    // Save user
+    const newUser = await pool.query(
+      "INSERT INTO users (name, email, password) VALUES ($1,$2,$3) RETURNING *",
+      [name, email, hashedPassword]
+    );
 
-    if (error) throw error;
-
-    res.json({ id: data.id, name: data.name, email: data.email });
+    res.json(newUser.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("DB ERROR:", err); // 👈 VERY IMPORTANT
+  return res.status(500).json({ message: "DB error", error: err.message });
   }
 };
 
