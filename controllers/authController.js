@@ -126,10 +126,9 @@ exports.googleLoginSuccess = async (req, res) => {
   try {
     const user = req.user;
 
-    // check verification
-    if (!user.is_verified && user.provider === "local")  {
+    if (!user.is_verified && user.provider === "local") {
       return res.redirect(
-        `http://localhost:3000/login?error=verify_email`
+        `${process.env.FRONTEND_URL}/login?error=verify_email`
       );
     }
 
@@ -139,12 +138,13 @@ exports.googleLoginSuccess = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.redirect(
-      `http://localhost:3000/auth-success?token=${token}`
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/auth-success?token=${token}`
     );
 
   } catch (err) {
     console.error(err);
+    return res.status(500).json({ message: "OAuth error" });
   }
 };
 exports.verifyOTP = async (req, res) => {
