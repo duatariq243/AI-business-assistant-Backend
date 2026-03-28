@@ -82,7 +82,7 @@ exports.login = async (req, res) => {
 
     const dbUser = user.rows[0];
 
-    // 🔥 DEBUG (VERY IMPORTANT)
+    // DEBUG (VERY IMPORTANT)
     console.log("DB USER:", dbUser);
 
     if (!dbUser.password || typeof dbUser.password !== "string") {
@@ -126,7 +126,7 @@ exports.login = async (req, res) => {
 exports.googleLoginSuccess = async (req, res) => {
   try {
     const user = req.user;
-
+     console.log("FRONTEND URL:", process.env.FRONTEND_URL);
    if (!user.is_verified && user.provider === "local") {
   return res.redirect(
     `${process.env.FRONTEND_URL}/verify-otp?email=${user.email}`
