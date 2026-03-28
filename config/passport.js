@@ -7,7 +7,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-     callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL, // ✅ FIXED
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -21,7 +21,9 @@ passport.use(
 
         if (user.rows.length === 0) {
           user = await pool.query(
-            "INSERT INTO users (name, email, password) VALUES ($1,$2,$3) RETURNING *",
+            `INSERT INTO users (name, email, password, provider, is_verified)
+             VALUES ($1, $2, $3, 'google', true)
+             RETURNING *`,
             [name, email, null]
           );
         }
