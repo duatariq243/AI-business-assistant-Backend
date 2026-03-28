@@ -126,18 +126,15 @@ exports.login = async (req, res) => {
 exports.googleLoginSuccess = async (req, res) => {
   try {
     const user = req.user;
-     console.log("FRONTEND URL:", process.env.FRONTEND_URL);
-   if (!user.is_verified && user.provider === "local") {
-  return res.redirect(`${FRONTEND_URL}/dashboard?token=${token}`);
-  
-}
 
+    // create token FIRST
     const token = jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
+    // ALWAYS redirect directly (no OTP for Google users)
     return res.redirect(
       `${process.env.FRONTEND_URL}/auth-success?token=${token}`
     );
