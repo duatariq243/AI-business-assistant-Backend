@@ -128,9 +128,8 @@ exports.googleLoginSuccess = async (req, res) => {
     const user = req.user;
      console.log("FRONTEND URL:", process.env.FRONTEND_URL);
    if (!user.is_verified && user.provider === "local") {
-  return res.redirect(
-    `${process.env.FRONTEND_URL}/verify-otp?email=${user.email}`
-  );
+  return res.redirect(`${FRONTEND_URL}/dashboard?token=${token}`);
+  
 }
 
     const token = jwt.sign(
