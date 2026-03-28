@@ -135,9 +135,10 @@ exports.googleLoginSuccess = async (req, res) => {
     );
 
     // ALWAYS redirect directly (no OTP for Google users)
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/auth-success?token=${token}`
-    );
+ return res.redirect(
+  `${process.env.FRONTEND_URL}/auth-success?token=${token}`
+);
+    
 
   } catch (err) {
     console.error(err);
