@@ -1,9 +1,10 @@
-require("dotenv").config(); 
+require("dotenv").config();
+
 console.log("DATABASE_URL:", process.env.DATABASE_URL);
 const express = require("express");
 const cors = require("cors");
 
-
+require("./config/passport");
 const pool = require("./db");
 
 
@@ -12,6 +13,8 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 app.use(express.json()); 
 app.use(cors());
+
+
 
 const authRoutes = require("./routes/auth");
 app.use("/api/auth",authRoutes); // for login and signup routes
