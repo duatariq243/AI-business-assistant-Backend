@@ -102,8 +102,9 @@ exports.login = async (req, res) => {
 
     if (!dbUser.is_verified) {
       return res.status(403).json({
-        message: "Please verify your email first",
-      });
+  message: "Please verify your email first",
+  email: dbUser.email
+});
     }
 
     const token = jwt.sign(
@@ -126,11 +127,11 @@ exports.googleLoginSuccess = async (req, res) => {
   try {
     const user = req.user;
 
-    if (!user.is_verified && user.provider === "local") {
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/login?error=verify_email`
-      );
-    }
+   if (!user.is_verified && user.provider === "local") {
+  return res.redirect(
+    `${process.env.FRONTEND_URL}/verify-otp?email=${user.email}`
+  );
+}
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
