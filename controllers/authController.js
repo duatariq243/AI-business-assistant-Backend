@@ -206,3 +206,44 @@ console.log("DB OTP:", dbUser.otp_code);
     res.status(500).json({ error: err.message });
   }
 };
+exports.resendOTP = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (user.rows.length === 0) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    const dbUser = user.rows[0];
+
+    if (dbUser.is_verified) {
+      return res.status(400).json({ message: "User already verified" });
+    }
+
+    //  generate NEW OTP
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+    //  update DB with new OTP
+    await pool.query(
+      "UPDATE users SET otp_code = $1, otp_expires = $2 WHERE email = $3",
+      [newOtp, otpExpires, email]
+    );
+
+    //  send email again
+    await sendOTPEmail(email, newOtp);
+
+    console.log("NEW OTP:", newOtp);
+
+    res.json({ message: "OTP resent successfully" });
+
+  } catch (err) {
+    console.error("RESEND OTP ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
