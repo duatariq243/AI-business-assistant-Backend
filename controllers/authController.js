@@ -10,6 +10,17 @@ exports.signup = async (req, res) => {
   const { name, email, password } = req.body;
 
   try {
+    //0. Strong password validation (ONLY for local signup)
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+      });
+    }
+
     // 1. check existing user
     const existing = await pool.query(
       "SELECT * FROM users WHERE email = $1",
